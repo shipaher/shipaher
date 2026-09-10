@@ -153,7 +153,10 @@
         startBtn.disabled = true;
     } else {
         recognition = new SpeechRecognition();
-        recognition.lang = 'zh-CN'; 
+        
+        // Đã sửa thành Tiếng Trung Đài Loan (Phồn thể)
+        recognition.lang = 'zh-TW'; 
+        
         recognition.continuous = true; 
         recognition.interimResults = true; 
 
@@ -161,7 +164,6 @@
             startBtn.style.display = 'none';
             stopBtn.style.display = 'block';
             statusIndicator.innerHTML = 'Đang nghe <span class="recording-pulse"></span>';
-            // Không xóa interimText ở đây để giữ lại câu văn cũ nếu người dùng đang nói dở
         };
 
         recognition.onresult = function(event) {
@@ -182,20 +184,15 @@
 
         recognition.onerror = function(event) {
             console.warn("Lỗi Mic phụ:", event.error);
-            // Chỉ dừng hẳn nếu bị từ chối quyền hoặc lỗi phần cứng
             if (event.error === 'not-allowed' || event.error === 'audio-capture') {
                 interimText.innerText = "❌ Lỗi: Bạn chưa cấp quyền hoặc micro hỏng.";
                 isIntentionallyListening = false;
                 resetUI();
             }
-            // Các lỗi như 'no-speech' (không nghe thấy tiếng) sẽ được bỏ qua 
-            // để sự kiện onend phía dưới tự động kích hoạt lại mic
         };
 
         recognition.onend = function() {
             if (isIntentionallyListening) {
-                // Tối ưu hóa: Thêm độ trễ 300ms để hệ điều hành điện thoại kịp nhả mic ra 
-                // và cấp lại cho trang web mà không bị lỗi "khoảng mù"
                 setTimeout(() => {
                     try {
                         recognition.start();
