@@ -148,7 +148,7 @@
     window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     
     if (!window.SpeechRecognition) {
-        interimText.innerText = "❌ Lỗi: Trình duyệt này không hỗ trợ. Vui lòng mở bằng Safari (iOS) hoặc Chrome (Android). Không dùng trình duyệt trong Zalo/Facebook.";
+        interimText.innerText = "❌ Lỗi: Trình duyệt này không hỗ trợ. Vui lòng mở bằng Safari (iOS) hoặc Chrome (Android).";
         interimText.style.color = "red";
         startBtn.disabled = true;
     } else {
@@ -161,7 +161,7 @@
             startBtn.style.display = 'none';
             stopBtn.style.display = 'block';
             statusIndicator.innerHTML = 'Đang nghe <span class="recording-pulse"></span>';
-            interimText.innerText = "...";
+            // Không xóa interimText ở đây để giữ lại câu văn cũ nếu người dùng đang nói dở
         };
 
         recognition.onresult = function(event) {
@@ -181,21 +181,28 @@
         };
 
         recognition.onerror = function(event) {
-            console.error("Lỗi Mic:", event.error);
-            if (event.error === 'not-allowed') {
-                interimText.innerText = "❌ Bạn chưa cấp quyền sử dụng Micro cho trang web này.";
+            console.warn("Lỗi Mic phụ:", event.error);
+            // Chỉ dừng hẳn nếu bị từ chối quyền hoặc lỗi phần cứng
+            if (event.error === 'not-allowed' || event.error === 'audio-capture') {
+                interimText.innerText = "❌ Lỗi: Bạn chưa cấp quyền hoặc micro hỏng.";
                 isIntentionallyListening = false;
                 resetUI();
             }
+            // Các lỗi như 'no-speech' (không nghe thấy tiếng) sẽ được bỏ qua 
+            // để sự kiện onend phía dưới tự động kích hoạt lại mic
         };
 
         recognition.onend = function() {
             if (isIntentionallyListening) {
-                try {
-                    recognition.start();
-                } catch(e) {
-                    console.log("Đang thử khởi động lại mic...");
-                }
+                // Tối ưu hóa: Thêm độ trễ 300ms để hệ điều hành điện thoại kịp nhả mic ra 
+                // và cấp lại cho trang web mà không bị lỗi "khoảng mù"
+                setTimeout(() => {
+                    try {
+                        recognition.start();
+                    } catch(e) {
+                        console.log("Khởi động lại mic trong nền...");
+                    }
+                }, 300);
             } else {
                 resetUI();
             }
@@ -203,6 +210,7 @@
 
         startBtn.addEventListener('click', () => { 
             isIntentionallyListening = true;
+            interimText.innerText = "...";
             try {
                 recognition.start(); 
             } catch(e) {}
@@ -218,7 +226,7 @@
         startBtn.style.display = 'block';
         stopBtn.style.display = 'none';
         statusIndicator.innerHTML = 'Tắt';
-        interimText.innerText = "Đã dừng nghe.";
+        interimText.innerText = "Đã dừng nghe. Nhấn Bắt đầu để tiếp tục.";
     }
 
     async function processTranslationStreaming(chineseText) {
@@ -231,7 +239,7 @@
         const resultHTML = `
             <div class="result-item" id="${resultId}">
                 <div class="chinese-text">${chineseText}</div>
-                <div class="ai-response typing">Đang dịch...</div>
+                <div class="ai-response typing">Đang xử lý...</div>
             </div>
         `;
         finalResults.insertAdjacentHTML('afterbegin', resultHTML);
@@ -239,7 +247,6 @@
         const responseBox = document.querySelector(`#${resultId} .ai-response`);
 
         try {
-            // Gọi qua Backend của Vercel thay vì gọi trực tiếp
             const response = await fetch("/api/chat", {
                 method: 'POST',
                 headers: {
@@ -251,7 +258,7 @@
                 })
             });
 
-            if (!response.ok) throw new Error("Lỗi Server hoặc API Key");
+            if (!response.ok) throw new Error("Lỗi API/Mạng");
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder("utf-8");
@@ -280,8 +287,8 @@
             responseBox.classList.remove('typing'); 
 
         } catch (error) {
-            responseBox.innerText = "Lỗi kết nối hoặc API Key sai/hết hạn.";
-            responseBox.style.color = "red";
+            responseBox.innerText = "⚠️ Lỗi đường truyền, vui lòng thử lại.";
+            responseBox.style.color = "#e41e3f";
             responseBox.classList.remove('typing');
         }
     }
