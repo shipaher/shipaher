@@ -183,16 +183,16 @@
                     
                     clearTimeout(translateTimeout);
                     
+                    // Cài đặt thời gian chờ chính xác 15 giây (15000ms)
                     translateTimeout = setTimeout(() => {
                         let finalSentence = sentenceBuffer.replace(/，$/, ''); 
                         if (finalSentence) {
                             processTranslationStreaming(finalSentence);
                             sentenceBuffer = ''; 
-                            // Thông báo đã gửi đi mà không làm gián đoạn luồng nghe
-                            interimText.innerText = "⚡ Đã chuyển đi dịch, đang nghe câu tiếp...";
+                            interimText.innerText = "⚡ Đã chuyển đi dịch, đang nghe đoạn tiếp theo...";
                             interimText.style.color = "#31a24c";
                         }
-                    }, 1500);
+                    }, 15000);
 
                 } else {
                     currentInterim += event.results[i][0].transcript;
@@ -201,7 +201,7 @@
             
             if (currentInterim !== '' || sentenceBuffer !== '') {
                 interimText.style.color = "#8a8d91";
-                interimText.innerText = sentenceBuffer + currentInterim + (currentInterim === '' ? " (đang chờ...)" : "");
+                interimText.innerText = sentenceBuffer + currentInterim + (currentInterim === '' ? " (đang chờ 15s im lặng...)" : "");
             }
         };
 
@@ -216,6 +216,8 @@
 
         recognition.onend = function() {
             if (isIntentionallyListening) {
+                // Mic tự ngắt do thuật toán trình duyệt sẽ tự động gọi lại ngay lập tức
+                // Dữ liệu nháp (sentenceBuffer) và bộ đếm 15s vẫn tiếp tục chạy ngầm mà không bị mất
                 setTimeout(() => {
                     try {
                         recognition.start();
@@ -240,7 +242,15 @@
         
         stopBtn.addEventListener('click', () => { 
             isIntentionallyListening = false;
+            
+            // Nếu ấn dừng và có dữ liệu, ép gửi đi dịch ngay lập tức không cần chờ 15s nữa
             clearTimeout(translateTimeout); 
+            let finalSentence = sentenceBuffer.replace(/，$/, ''); 
+            if (finalSentence) {
+                processTranslationStreaming(finalSentence);
+                sentenceBuffer = '';
+            }
+            
             recognition.stop(); 
         });
     }
