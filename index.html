@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Trợ dịch Tiếng Trung Mobile</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #1c1e21;
+            margin: 0;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 600px; /* Tối ưu cho mobile */
+            background: #fff;
+            padding: 20px 15px;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            box-sizing: border-box;
+        }
+        h1 { 
+            text-align: center; 
+            color: #1877f2; 
+            font-size: 22px; 
+            margin-top: 0;
+        }
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        select {
+            padding: 14px;
+            font-size: 16px;
+            border: 1px solid #ccd0d5;
+            border-radius: 8px;
+            outline: none;
+            background-color: white;
+            width: 100%;
+            appearance: none; /* Xóa style mặc định trên iOS */
+        }
+        button {
+            padding: 16px;
+            font-size: 17px;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            width: 100%;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        button:active { transform: scale(0.98); } /* Hiệu ứng nhấn cho màn hình cảm ứng */
+        #startBtn { background-color: #31a24c; color: white; }
+        #stopBtn { background-color: #e41e3f; color: white; display: none; }
+        
+        .box {
+            margin-bottom: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #e4e6eb;
+            min-height: 80px;
+            background: #f7f8fa;
+        }
+        .box-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #65676b;
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+        #interimText { color: #8a8d91; font-style: italic; font-size: 16px;}
+        
+        .result-item {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #e4e6eb;
+        }
+        .chinese-text { font-size: 1.3em; font-weight: bold; margin-bottom: 6px; color: #050505;}
+        .ai-response {
+            white-space: pre-wrap;
+            color: #31a24c;
+            line-height: 1.5;
+            font-size: 16px;
+        }
+        .typing::after {
+            content: '▌';
+            animation: blink 1s step-start infinite;
+            color: #8a8d91;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+        
+        /* Hiệu ứng nhấp nháy báo đang ghi âm */
+        .recording-pulse {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            background-color: #e41e3f;
+            border-radius: 50%;
+            margin-left: 8px;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Phiên dịch Trực Tiếp ⚡</h1>
+    
+    <div class="controls">
+        <select id="targetLang">
+            <option value="tiếng Việt">Dịch sang: Tiếng Việt 🇻🇳</option>
+            <option value="tiếng Anh">Dịch sang: Tiếng Anh 🇬🇧</option>
+            <option value="tiếng Indonesia">Dịch sang: Tiếng Indonesia 🇮🇩</option>
+        </select>
+        <button id="startBtn">🎤 Bắt đầu nghe</button>
+        <button id="stopBtn">⏹ Dừng nghe</button>
+    </div>
+
+    <div class="box">
+        <div class="box-title">Trạng thái Mic: <span id="statusIndicator">Tắt</span></div>
+        <div id="interimText">Nhấn "Bắt đầu nghe" và cấp quyền Micro để nói...</div>
+    </div>
+
+    <div class="box">
+        <div class="box-title">Bản dịch:</div>
+        <div id="finalResults"></div>
+    </div>
+</div>
+
+<script>
+    const API_URL = "https://api.xkiro.com/v1/chat/completions"; 
+    const API_KEY = "sk-xt-392d4fc7a9049a5a6dc1f36d9ab150dff32c16d7c764514c";
+    const MODEL_NAME = "deepseek/deepseek-v4-flash"; 
+
+    const langSelect = document.getElementById('targetLang');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const interimText = document.getElementById('interimText');
+    const finalResults = document.getElementById('finalResults');
+    const statusIndicator = document.getElementById('statusIndicator');
+
+    let isIntentionallyListening = false; // Biến cờ (Flag) cực kỳ quan trọng cho Mobile
+    let recognition;
+
+    window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
+    if (!window.SpeechRecognition) {
+        interimText.innerText = "❌ Lỗi: Trình duyệt này không hỗ trợ. Vui lòng mở bằng Safari (iOS) hoặc Chrome (Android). Không dùng trình duyệt trong Zalo/Facebook.";
+        interimText.style.color = "red";
+        startBtn.disabled = true;
+    } else {
+        recognition = new SpeechRecognition();
+        recognition.lang = 'zh-CN'; 
+        recognition.continuous = true; 
+        recognition.interimResults = true; 
+
+        recognition.onstart = function() {
+            startBtn.style.display = 'none';
+            stopBtn.style.display = 'block';
+            statusIndicator.innerHTML = 'Đang nghe <span class="recording-pulse"></span>';
+            interimText.innerText = "...";
+        };
+
+        recognition.onresult = function(event) {
+            let interimTranscript = '';
+            
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    let finalTranscript = event.results[i][0].transcript;
+                    processTranslationStreaming(finalTranscript);
+                } else {
+                    interimTranscript += event.results[i][0].transcript;
+                }
+            }
+            if (interimTranscript !== '') {
+                interimText.innerText = interimTranscript;
+            }
+        };
+
+        recognition.onerror = function(event) {
+            console.error("Lỗi Mic:", event.error);
+            if (event.error === 'not-allowed') {
+                interimText.innerText = "❌ Bạn chưa cấp quyền sử dụng Micro cho trang web này.";
+                isIntentionallyListening = false;
+                resetUI();
+            }
+        };
+
+        // Trên Mobile, mic hay tự tắt. Cần ép bật lại nếu người dùng chưa bấm Dừng
+        recognition.onend = function() {
+            if (isIntentionallyListening) {
+                try {
+                    recognition.start();
+                } catch(e) {
+                    console.log("Đang thử khởi động lại mic...");
+                }
+            } else {
+                resetUI();
+            }
+        };
+
+        startBtn.addEventListener('click', () => { 
+            isIntentionallyListening = true;
+            try {
+                recognition.start(); 
+            } catch(e) {}
+        });
+        
+        stopBtn.addEventListener('click', () => { 
+            isIntentionallyListening = false;
+            recognition.stop(); 
+        });
+    }
+
+    function resetUI() {
+        startBtn.style.display = 'block';
+        stopBtn.style.display = 'none';
+        statusIndicator.innerHTML = 'Tắt';
+        interimText.innerText = "Đã dừng nghe.";
+    }
+
+    async function processTranslationStreaming(chineseText) {
+        if (!chineseText.trim()) return;
+        interimText.innerText = "..."; // Xóa text tạm để chuẩn bị nghe câu mới
+
+        const targetLanguage = langSelect.value;
+        const resultId = 'res-' + Date.now();
+        
+        const resultHTML = `
+            <div class="result-item" id="${resultId}">
+                <div class="chinese-text">${chineseText}</div>
+                <div class="ai-response typing">Đang dịch...</div>
+            </div>
+        `;
+        finalResults.insertAdjacentHTML('afterbegin', resultHTML);
+        
+        const responseBox = document.querySelector(`#${resultId} .ai-response`);
+        const prompt = `Dịch sang ${targetLanguage} và kèm Pinyin.\nNguyên văn: "${chineseText}"\nTrả lời ngắn gọn đúng 2 dòng:\nPinyin: ...\nDịch: ...`;
+
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${API_KEY}`
+                },
+                body: JSON.stringify({
+                    model: MODEL_NAME,
+                    stream: true, 
+                    messages: [
+                        { role: 'system', content: 'You are a fast translation API.' },
+                        { role: 'user', content: prompt }
+                    ],
+                    temperature: 0.3
+                })
+            });
+
+            if (!response.ok) throw new Error("API Error");
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+            let fullText = "";
+            responseBox.innerText = ""; 
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n');
+                
+                for (const line of lines) {
+                    if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+                        try {
+                            const data = JSON.parse(line.substring(6));
+                            if (data.choices[0].delta.content) {
+                                fullText += data.choices[0].delta.content;
+                                responseBox.innerText = fullText; 
+                            }
+                        } catch (e) {}
+                    }
+                }
+            }
+            responseBox.classList.remove('typing'); 
+
+        } catch (error) {
+            responseBox.innerText = "Lỗi kết nối hoặc API Key.";
+            responseBox.style.color = "red";
+            responseBox.classList.remove('typing');
+        }
+    }
+</script>
+
+</body>
+</html>
