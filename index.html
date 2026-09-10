@@ -75,12 +75,16 @@
             font-size: 14px;
             text-transform: uppercase;
         }
-        #interimText { color: #8a8d91; font-style: italic; font-size: 16px;}
+        #interimText { color: #8a8d91; font-size: 16px; line-height: 1.4; transition: all 0.2s;}
         
         .result-item {
             margin-bottom: 15px;
             padding-bottom: 15px;
             border-bottom: 1px solid #e4e6eb;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
         .chinese-text { font-size: 1.3em; font-weight: bold; margin-bottom: 6px; color: #050505;}
         .ai-response {
@@ -128,8 +132,8 @@
         <div id="interimText">Nhấn "Bắt đầu nghe" và cấp quyền Micro để nói...</div>
     </div>
 
-    <div class="box">
-        <div class="box-title">Bản dịch:</div>
+    <div class="box" style="background: transparent; border: none; padding: 0;">
+        <div class="box-title" style="margin-bottom: 12px;">Bản dịch:</div>
         <div id="finalResults"></div>
     </div>
 </div>
@@ -144,19 +148,20 @@
 
     let isIntentionallyListening = false;
     let recognition;
+    
+    let sentenceBuffer = ''; 
+    let translateTimeout = null;
 
     window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     
     if (!window.SpeechRecognition) {
-        interimText.innerText = "❌ Lỗi: Trình duyệt này không hỗ trợ. Vui lòng mở bằng Safari (iOS) hoặc Chrome (Android).";
+        interimText.innerText = "❌ Lỗi: Trình duyệt này không hỗ trợ.";
         interimText.style.color = "red";
         startBtn.disabled = true;
     } else {
         recognition = new SpeechRecognition();
         
-        // Đã sửa thành Tiếng Trung Đài Loan (Phồn thể)
         recognition.lang = 'zh-TW'; 
-        
         recognition.continuous = true; 
         recognition.interimResults = true; 
 
@@ -167,18 +172,36 @@
         };
 
         recognition.onresult = function(event) {
-            let interimTranscript = '';
+            let currentInterim = '';
             
             for (let i = event.resultIndex; i < event.results.length; ++i) {
                 if (event.results[i].isFinal) {
-                    let finalTranscript = event.results[i][0].transcript;
-                    processTranslationStreaming(finalTranscript);
+                    let text = event.results[i][0].transcript.trim();
+                    if (text) {
+                        sentenceBuffer += text + '，'; 
+                    }
+                    
+                    clearTimeout(translateTimeout);
+                    
+                    translateTimeout = setTimeout(() => {
+                        let finalSentence = sentenceBuffer.replace(/，$/, ''); 
+                        if (finalSentence) {
+                            processTranslationStreaming(finalSentence);
+                            sentenceBuffer = ''; 
+                            // Thông báo đã gửi đi mà không làm gián đoạn luồng nghe
+                            interimText.innerText = "⚡ Đã chuyển đi dịch, đang nghe câu tiếp...";
+                            interimText.style.color = "#31a24c";
+                        }
+                    }, 1500);
+
                 } else {
-                    interimTranscript += event.results[i][0].transcript;
+                    currentInterim += event.results[i][0].transcript;
                 }
             }
-            if (interimTranscript !== '') {
-                interimText.innerText = interimTranscript;
+            
+            if (currentInterim !== '' || sentenceBuffer !== '') {
+                interimText.style.color = "#8a8d91";
+                interimText.innerText = sentenceBuffer + currentInterim + (currentInterim === '' ? " (đang chờ...)" : "");
             }
         };
 
@@ -197,9 +220,9 @@
                     try {
                         recognition.start();
                     } catch(e) {
-                        console.log("Khởi động lại mic trong nền...");
+                        console.log("Mic đang bận.");
                     }
-                }, 300);
+                }, 500);
             } else {
                 resetUI();
             }
@@ -207,7 +230,9 @@
 
         startBtn.addEventListener('click', () => { 
             isIntentionallyListening = true;
+            sentenceBuffer = '';
             interimText.innerText = "...";
+            interimText.style.color = "#8a8d91";
             try {
                 recognition.start(); 
             } catch(e) {}
@@ -215,6 +240,7 @@
         
         stopBtn.addEventListener('click', () => { 
             isIntentionallyListening = false;
+            clearTimeout(translateTimeout); 
             recognition.stop(); 
         });
     }
@@ -228,7 +254,6 @@
 
     async function processTranslationStreaming(chineseText) {
         if (!chineseText.trim()) return;
-        interimText.innerText = "...";
 
         const targetLanguage = langSelect.value;
         const resultId = 'res-' + Date.now();
@@ -236,7 +261,7 @@
         const resultHTML = `
             <div class="result-item" id="${resultId}">
                 <div class="chinese-text">${chineseText}</div>
-                <div class="ai-response typing">Đang xử lý...</div>
+                <div class="ai-response typing">Đang dịch...</div>
             </div>
         `;
         finalResults.insertAdjacentHTML('afterbegin', resultHTML);
@@ -282,7 +307,7 @@
                 }
             }
             responseBox.classList.remove('typing'); 
-
+            
         } catch (error) {
             responseBox.innerText = "⚠️ Lỗi đường truyền, vui lòng thử lại.";
             responseBox.style.color = "#e41e3f";
