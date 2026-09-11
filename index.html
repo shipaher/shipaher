@@ -1,9 +1,14 @@
+Dưới đây là mã HTML/JS đã được chỉnh sửa theo đúng yêu cầu của bạn:
+ * Bỏ thời gian chờ 15 giây: Hệ thống sẽ tự động gửi đi dịch ngay lập tức ngay khi bạn ngừng nói (kết thúc một câu/đoạn).
+ * Thêm tùy chọn Ngôn ngữ nguồn: Bạn có thể chọn nghe Tiếng Trung (Phồn thể) hoặc Tiếng Anh.
+ * Lưu lịch sử: Khi dịch xong, kết quả sẽ được lưu vào bộ nhớ của trình duyệt (Local Storage) và hiển thị ở phần "Lịch sử lưu trữ" bên dưới. Ngay cả khi bạn tải lại trang (F5) hay tắt đi mở lại, lịch sử vẫn còn để bạn xem lại. Có kèm theo nút Xóa lịch sử.
+Bạn có thể sao chép toàn bộ mã dưới đây để thay thế mã cũ:
 <!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Trợ dịch Tiếng Trung Mobile</title>
+    <title>Trợ dịch Trực Tiếp Mobile</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -36,15 +41,19 @@
             gap: 12px;
             margin-bottom: 20px;
         }
+        .lang-group {
+            display: flex;
+            gap: 10px;
+        }
         select {
             padding: 14px;
-            font-size: 16px;
+            font-size: 15px;
             border: 1px solid #ccd0d5;
             border-radius: 8px;
             outline: none;
             background-color: white;
             width: 100%;
-            appearance: none;
+            flex: 1;
         }
         button {
             padding: 16px;
@@ -74,6 +83,9 @@
             color: #65676b;
             font-size: 14px;
             text-transform: uppercase;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         #interimText { color: #8a8d91; font-size: 16px; line-height: 1.4; transition: all 0.2s;}
         
@@ -86,12 +98,17 @@
             border-radius: 8px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
-        .chinese-text { font-size: 1.3em; font-weight: bold; margin-bottom: 6px; color: #050505;}
+        .source-text { font-size: 1.2em; font-weight: bold; margin-bottom: 6px; color: #050505;}
         .ai-response {
             white-space: pre-wrap;
             color: #31a24c;
             line-height: 1.5;
             font-size: 16px;
+        }
+        .time-stamp {
+            font-size: 12px;
+            color: #8a8d91;
+            margin-bottom: 5px;
         }
         .typing::after {
             content: '▌';
@@ -110,6 +127,14 @@
             animation: pulse 1.5s infinite;
         }
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+
+        #clearHistoryBtn {
+            padding: 6px 12px;
+            font-size: 12px;
+            width: auto;
+            background-color: #e4e6eb;
+            color: #1c1e21;
+        }
     </style>
 </head>
 <body>
@@ -118,11 +143,17 @@
     <h1>Phiên dịch Trực Tiếp ⚡</h1>
     
     <div class="controls">
-        <select id="targetLang">
-            <option value="tiếng Việt">Dịch sang: Tiếng Việt 🇻🇳</option>
-            <option value="tiếng Anh">Dịch sang: Tiếng Anh 🇬🇧</option>
-            <option value="tiếng Indonesia">Dịch sang: Tiếng Indonesia 🇮🇩</option>
-        </select>
+        <div class="lang-group">
+            <select id="sourceLang">
+                <option value="zh-TW">Nghe: Tiếng Trung (Phồn thể) 🇹🇼</option>
+                <option value="en-US">Nghe: Tiếng Anh 🇬🇧</option>
+            </select>
+            <select id="targetLang">
+                <option value="tiếng Việt">Dịch ra: Tiếng Việt 🇻🇳</option>
+                <option value="tiếng Anh">Dịch ra: Tiếng Anh 🇬🇧</option>
+                <option value="tiếng Trung">Dịch ra: Tiếng Trung 🇨🇳</option>
+            </select>
+        </div>
         <button id="startBtn">🎤 Bắt đầu nghe</button>
         <button id="stopBtn">⏹ Dừng nghe</button>
     </div>
@@ -132,36 +163,47 @@
         <div id="interimText">Nhấn "Bắt đầu nghe" và cấp quyền Micro để nói...</div>
     </div>
 
+    <!-- Nơi hiển thị kết quả đang dịch trực tiếp -->
     <div class="box" style="background: transparent; border: none; padding: 0;">
-        <div class="box-title" style="margin-bottom: 12px;">Bản dịch:</div>
-        <div id="finalResults"></div>
+        <div class="box-title" style="margin-bottom: 12px;">Đang dịch:</div>
+        <div id="liveResults"></div>
+    </div>
+
+    <!-- Nơi hiển thị lịch sử đã lưu -->
+    <div class="box" style="background: #f0f2f5;">
+        <div class="box-title">
+            Lịch sử lưu trữ
+            <button id="clearHistoryBtn">Xóa lịch sử</button>
+        </div>
+        <div id="historyResults"></div>
     </div>
 </div>
 
 <script>
-    const langSelect = document.getElementById('targetLang');
+    const sourceLangSelect = document.getElementById('sourceLang');
+    const targetLangSelect = document.getElementById('targetLang');
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
     const interimText = document.getElementById('interimText');
-    const finalResults = document.getElementById('finalResults');
+    const liveResults = document.getElementById('liveResults');
+    const historyResults = document.getElementById('historyResults');
     const statusIndicator = document.getElementById('statusIndicator');
+    const clearHistoryBtn = document.getElementById('clearHistoryBtn');
 
     let isIntentionallyListening = false;
     let recognition;
-    
-    let sentenceBuffer = ''; 
-    let translateTimeout = null;
+
+    // Load lịch sử từ LocalStorage khi khởi động
+    loadHistory();
 
     window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     
     if (!window.SpeechRecognition) {
-        interimText.innerText = "❌ Lỗi: Trình duyệt này không hỗ trợ.";
+        interimText.innerText = "❌ Lỗi: Trình duyệt này không hỗ trợ nhận diện giọng nói.";
         interimText.style.color = "red";
         startBtn.disabled = true;
     } else {
         recognition = new SpeechRecognition();
-        
-        recognition.lang = 'zh-TW'; 
         recognition.continuous = true; 
         recognition.interimResults = true; 
 
@@ -169,6 +211,8 @@
             startBtn.style.display = 'none';
             stopBtn.style.display = 'block';
             statusIndicator.innerHTML = 'Đang nghe <span class="recording-pulse"></span>';
+            interimText.style.color = "#8a8d91";
+            interimText.innerText = "Đang lắng nghe...";
         };
 
         recognition.onresult = function(event) {
@@ -176,37 +220,26 @@
             
             for (let i = event.resultIndex; i < event.results.length; ++i) {
                 if (event.results[i].isFinal) {
-                    let text = event.results[i][0].transcript.trim();
-                    if (text) {
-                        sentenceBuffer += text + '，'; 
+                    // Ngay khi có câu hoàn chỉnh (người dùng ngừng nói 1 nhịp), gửi đi dịch lập tức
+                    let finalSentence = event.results[i][0].transcript.trim();
+                    if (finalSentence) {
+                        processTranslationStreaming(finalSentence);
+                        interimText.innerText = "⚡ Đã chuyển đi dịch, đang nghe đoạn tiếp theo...";
+                        interimText.style.color = "#31a24c";
                     }
-                    
-                    clearTimeout(translateTimeout);
-                    
-                    // Cài đặt thời gian chờ chính xác 15 giây (15000ms)
-                    translateTimeout = setTimeout(() => {
-                        let finalSentence = sentenceBuffer.replace(/，$/, ''); 
-                        if (finalSentence) {
-                            processTranslationStreaming(finalSentence);
-                            sentenceBuffer = ''; 
-                            interimText.innerText = "⚡ Đã chuyển đi dịch, đang nghe đoạn tiếp theo...";
-                            interimText.style.color = "#31a24c";
-                        }
-                    }, 15000);
-
                 } else {
                     currentInterim += event.results[i][0].transcript;
                 }
             }
             
-            if (currentInterim !== '' || sentenceBuffer !== '') {
+            if (currentInterim !== '') {
                 interimText.style.color = "#8a8d91";
-                interimText.innerText = sentenceBuffer + currentInterim + (currentInterim === '' ? " (đang chờ 15s im lặng...)" : "");
+                interimText.innerText = currentInterim;
             }
         };
 
         recognition.onerror = function(event) {
-            console.warn("Lỗi Mic phụ:", event.error);
+            console.warn("Lỗi Mic:", event.error);
             if (event.error === 'not-allowed' || event.error === 'audio-capture') {
                 interimText.innerText = "❌ Lỗi: Bạn chưa cấp quyền hoặc micro hỏng.";
                 isIntentionallyListening = false;
@@ -216,14 +249,11 @@
 
         recognition.onend = function() {
             if (isIntentionallyListening) {
-                // Mic tự ngắt do thuật toán trình duyệt sẽ tự động gọi lại ngay lập tức
-                // Dữ liệu nháp (sentenceBuffer) và bộ đếm 15s vẫn tiếp tục chạy ngầm mà không bị mất
+                // Tự động bật lại mic nếu bị ngắt tự động bởi trình duyệt
                 setTimeout(() => {
                     try {
                         recognition.start();
-                    } catch(e) {
-                        console.log("Mic đang bận.");
-                    }
+                    } catch(e) {}
                 }, 500);
             } else {
                 resetUI();
@@ -232,9 +262,7 @@
 
         startBtn.addEventListener('click', () => { 
             isIntentionallyListening = true;
-            sentenceBuffer = '';
-            interimText.innerText = "...";
-            interimText.style.color = "#8a8d91";
+            recognition.lang = sourceLangSelect.value; // Gán ngôn ngữ nguồn đã chọn
             try {
                 recognition.start(); 
             } catch(e) {}
@@ -242,15 +270,6 @@
         
         stopBtn.addEventListener('click', () => { 
             isIntentionallyListening = false;
-            
-            // Nếu ấn dừng và có dữ liệu, ép gửi đi dịch ngay lập tức không cần chờ 15s nữa
-            clearTimeout(translateTimeout); 
-            let finalSentence = sentenceBuffer.replace(/，$/, ''); 
-            if (finalSentence) {
-                processTranslationStreaming(finalSentence);
-                sentenceBuffer = '';
-            }
-            
             recognition.stop(); 
         });
     }
@@ -262,19 +281,20 @@
         interimText.innerText = "Đã dừng nghe. Nhấn Bắt đầu để tiếp tục.";
     }
 
-    async function processTranslationStreaming(chineseText) {
-        if (!chineseText.trim()) return;
+    async function processTranslationStreaming(sourceText) {
+        if (!sourceText.trim()) return;
 
-        const targetLanguage = langSelect.value;
+        const targetLanguage = targetLangSelect.value;
         const resultId = 'res-' + Date.now();
         
+        // Tạo HTML khung hiển thị
         const resultHTML = `
             <div class="result-item" id="${resultId}">
-                <div class="chinese-text">${chineseText}</div>
+                <div class="source-text">${sourceText}</div>
                 <div class="ai-response typing">Đang dịch...</div>
             </div>
         `;
-        finalResults.insertAdjacentHTML('afterbegin', resultHTML);
+        liveResults.insertAdjacentHTML('afterbegin', resultHTML);
         
         const responseBox = document.querySelector(`#${resultId} .ai-response`);
 
@@ -285,7 +305,7 @@
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    text: chineseText,
+                    text: sourceText,
                     targetLanguage: targetLanguage
                 })
             });
@@ -318,13 +338,66 @@
             }
             responseBox.classList.remove('typing'); 
             
+            // LƯU LỊCH SỬ KHI DỊCH HOÀN TẤT
+            saveToHistory(sourceText, fullText);
+            
+            // Tùy chọn: Xóa thẻ trực tiếp sau 1 khoảng thời gian (ở đây giữ nguyên)
+            
         } catch (error) {
             responseBox.innerText = "⚠️ Lỗi đường truyền, vui lòng thử lại.";
             responseBox.style.color = "#e41e3f";
             responseBox.classList.remove('typing');
         }
     }
+
+    // --- CÁC HÀM XỬ LÝ LỊCH SỬ LƯU TRỮ ---
+    function saveToHistory(sourceText, translatedText) {
+        let history = JSON.parse(localStorage.getItem('translationHistory') || '[]');
+        
+        // Thêm bản ghi mới vào đầu mảng
+        history.unshift({
+            time: new Date().toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'}),
+            source: sourceText,
+            translation: translatedText
+        });
+
+        // Giới hạn lưu 50 câu gần nhất cho nhẹ máy
+        if (history.length > 50) history = history.slice(0, 50);
+
+        localStorage.setItem('translationHistory', JSON.stringify(history));
+        renderHistory();
+    }
+
+    function loadHistory() {
+        renderHistory();
+    }
+
+    function renderHistory() {
+        let history = JSON.parse(localStorage.getItem('translationHistory') || '[]');
+        if (history.length === 0) {
+            historyResults.innerHTML = '<div style="color:#8a8d91; text-align:center; padding: 10px;">Chưa có lịch sử.</div>';
+            return;
+        }
+
+        historyResults.innerHTML = history.map(item => `
+            <div class="result-item">
+                <div class="time-stamp">${item.time}</div>
+                <div class="source-text">${item.source}</div>
+                <div class="ai-response">${item.translation}</div>
+            </div>
+        `).join('');
+    }
+
+    clearHistoryBtn.addEventListener('click', () => {
+        if(confirm("Bạn có chắc chắn muốn xóa toàn bộ lịch sử không?")) {
+            localStorage.removeItem('translationHistory');
+            // Xóa luôn phần hiển thị "Đang dịch" phía trên cho sạch màn hình
+            liveResults.innerHTML = ''; 
+            renderHistory();
+        }
+    });
 </script>
 
 </body>
 </html>
+
